@@ -1,0 +1,20 @@
+[
+  {
+    "id": "m1",
+    "status": "Emerging",
+    "minutesAgo": 14,
+    "title": "“Day in the life” content is collapsing into speed",
+    "signal": "Creators are compressing the format into rapid, hyper-edited clips across small accounts.",
+    "whyItMatters": "Long-form authenticity is losing status. Efficiency and pace are becoming the flex.",
+    "where": ["TikTok"]
+  },
+  {
+    "id": "m2",
+    "status": "Emerging",
+    "minutesAgo": 180,
+    "title": "Comment screenshots are becoming primary content again",
+    "signal": "Comment threads are being reposted as standalone posts instead of replies.",
+    "whyItMatters": "When formats saturate, attention shifts to reaction and social proof. Comments become the content.",
+    "where": ["Instagram", "X"]
+  }
+]
