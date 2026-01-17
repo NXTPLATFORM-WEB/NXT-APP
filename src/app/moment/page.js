@@ -1,163 +1,144 @@
-"use client";
-
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { supabase } from "../../lib/supabaseClient";
+import Link from "next/link";
+import { supabase } from "@/lib/supabaseClient";
 
-export default function MomentPage() {
-  const sp = useSearchParams();
-  const id = sp.get("id");
+// Prevent static prerender on Vercel (important)
+export const dynamic = "force-dynamic";
 
-  const [m, setM] = useState(null);
+function MomentInner() {
+  const searchParams = useSearchParams();
+  const id = (searchParams.get("id") || "").trim();
+
+  const [moment, setMoment] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
-      setLoading(true);
+    async function run() {
       setErr("");
+      setLoading(true);
+      setMoment(null);
 
       if (!id) {
         setLoading(false);
-        setM(null);
         return;
       }
 
-      // hard timeout so it never "loads forever"
-      const timeout = setTimeout(() => {
-        if (!cancelled) {
-          setErr("Timed out loading this moment. Refresh and try again.");
-          setLoading(false);
+      try {
+        const { data, error } = await supabase
+          .from("moments")
+          .select("*")
+          .eq("id", id)
+          .maybeSingle();
+
+        if (cancelled) return;
+
+        if (error) throw error;
+        if (!data) {
+          setErr(`Moment not found for id: "${id}"`);
+        } else {
+          setMoment(data);
         }
-      }, 8000);
-
-      const { data, error } = await supabase
-        .from("moments")
-        .select("*")
-        .eq("id", id)
-        .maybeSingle();
-
-      clearTimeout(timeout);
-      if (cancelled) return;
-
-      if (error) {
-        setErr(error.message);
-        setM(null);
-      } else {
-        setM(data || null);
+      } catch (e) {
+        if (cancelled) return;
+        setErr(e?.message || "Failed to load moment");
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      setLoading(false);
     }
 
-    load();
+    run();
     return () => {
       cancelled = true;
     };
   }, [id]);
 
-  if (!id) {
-    return (
-      <main className="wrap">
-        <div className="panel">
-          <div className="title">No moment id.</div>
-          <div className="footerHint" style={{ marginTop: 10 }}>
-            Go back to <Link className="link" href="/">Home</Link>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  if (loading) {
-    return (
-      <main className="wrap">
-        <div className="panel">
-          <div className="title">Loading…</div>
-          <div className="footerHint" style={{ marginTop: 10 }}>
-            Pulling the moment from Supabase.
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  if (err) {
-    return (
-      <main className="wrap">
-        <div className="panel">
-          <div className="title">Couldn’t load this moment.</div>
-          <div className="footerHint" style={{ marginTop: 10 }}>{err}</div>
-          <div className="footerHint" style={{ marginTop: 10 }}>
-            Back to <Link className="link" href="/">Home</Link>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  if (!m) {
-    return (
-      <main className="wrap">
-        <div className="panel">
-          <div className="title">Moment not found.</div>
-          <div className="footerHint" style={{ marginTop: 10 }}>
-            Back to <Link className="link" href="/">Home</Link>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
   return (
-    <main className="wrap">
-      <header className="topbar">
-        <div className="brand">
-          <h1>Moment</h1>
-          <p>{m.topic} · {m.status}</p>
-        </div>
-        <div className="pillrow">
-          <Link className="cta" href="/">Home</Link>
-          <Link className="cta" href="/admin/tools">Tools</Link>
-        </div>
-      </header>
+    <div style={{ maxWidth: 820, margin: "40px auto", padding: "0 16px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+        <Link href="/" style={{ textDecoration: "underline" }}>
+          ← Back
+        </Link>
+        <Link href="/admin" style={{ textDecoration: "underline" }}>
+          Admin
+        </Link>
+      </div>
 
-      <article className="panel" style={{ marginTop: 16 }}>
-        <div className="mini">
-          <span className="pill">{m.topic}</span>
-          <span className={`statusPill s${String(m.status || "Emerging").replace(/\s/g, "")}`}>
-            {m.status}
-          </span>
-          {m.source && <span className="source">{m.source}</span>}
-        </div>
+      <h1 style={{ marginTop: 18 }}>Moment</h1>
 
-        <h2 style={{ marginTop: 10 }}>{m.title}</h2>
-
-        <div className="block">
-          <div className="k">Signal</div>
-          <div className="v">{m.signal}</div>
-        </div>
-
-        {m.why_it_matters && (
-          <div className="block">
-            <div className="k">Why it matters</div>
-            <div className="v">{m.why_it_matters}</div>
+      {!id && (
+        <div style={{ padding: 14, border: "1px solid #ddd", borderRadius: 10 }}>
+          <div style={{ fontWeight: 600 }}>No id provided</div>
+          <div style={{ marginTop: 8 }}>
+            Try: <code>/moment?id=m1</code>
           </div>
-        )}
+        </div>
+      )}
 
-        {m.source_url && (
-          <div className="block">
-            <div className="k">Source</div>
-            <div className="v">
-              <a className="link" href={m.source_url} target="_blank" rel="noreferrer">
-                Open original story →
+      {loading && <div style={{ marginTop: 16 }}>Loading…</div>}
+
+      {!loading && err && (
+        <div
+          style={{
+            marginTop: 16,
+            padding: 14,
+            border: "1px solid #ffb4b4",
+            borderRadius: 10,
+            background: "#fff5f5",
+          }}
+        >
+          <div style={{ fontWeight: 700 }}>Error</div>
+          <div style={{ marginTop: 6 }}>{err}</div>
+        </div>
+      )}
+
+      {!loading && moment && (
+        <div
+          style={{
+            marginTop: 16,
+            padding: 16,
+            border: "1px solid #ddd",
+            borderRadius: 12,
+          }}
+        >
+          <div style={{ opacity: 0.7, fontSize: 13 }}>
+            {moment.topic ? `Topic: ${moment.topic}` : "Topic: (none)"} ·{" "}
+            {moment.created_at ? new Date(moment.created_at).toLocaleString() : ""}
+          </div>
+
+          <h2 style={{ margin: "10px 0 0" }}>{moment.title || "Untitled"}</h2>
+
+          {moment.summary && (
+            <p style={{ marginTop: 10, lineHeight: 1.6 }}>{moment.summary}</p>
+          )}
+
+          {moment.body && (
+            <div style={{ marginTop: 12, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+              {moment.body}
+            </div>
+          )}
+
+          {moment.url && (
+            <div style={{ marginTop: 14 }}>
+              Source:{" "}
+              <a href={moment.url} target="_blank" rel="noreferrer">
+                {moment.url}
               </a>
             </div>
-          </div>
-        )}
-      </article>
-    </main>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function MomentPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 20 }}>Loading…</div>}>
+      <MomentInner />
+    </Suspense>
   );
 }
