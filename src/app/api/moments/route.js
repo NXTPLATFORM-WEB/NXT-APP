@@ -17,6 +17,16 @@ export async function GET(req) {
     );
   }
 
+  // force numeric id
+  const numericId = Number(id);
+
+  if (isNaN(numericId)) {
+    return NextResponse.json(
+      { error: "id must be a number (DB id)" },
+      { status: 400 }
+    );
+  }
+
   const { data, error } = await supabase
     .from("stories")
     .select(`
@@ -28,7 +38,7 @@ export async function GET(req) {
       summary,
       raw
     `)
-    .eq("id", id)
+    .eq("id", numericId)
     .single();
 
   if (error) {
