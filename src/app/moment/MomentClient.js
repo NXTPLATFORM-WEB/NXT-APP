@@ -1,115 +1,134 @@
-// src/app/moment/MomentClient.js
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 
-function formatDate(v) {
+function pickBestText(row) {
+  // Try common fields in priority order
+  const raw = row?.raw || {};
+  const text =
+    row?.content ||
+    row?.summary ||
+    raw?.content ||
+    raw?.description ||
+    raw?.["content:encoded"] ||
+    "";
+
+  // If it's an object/array, stringify it safely
+  if (typeof text === "string") return text;
   try {
-    if (!v) return "";
-    const d = new Date(v);
-    return d.toLocaleString();
+    return JSON.stringify(text, null, 2);
   } catch {
-    return "";
+    return String(text);
   }
 }
 
-export default function MomentClient() {
-  const searchParams = useSearchParams();
-  const idParam = searchParams.get("id");
-
+export default function MomentClient({ id }) {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [moment, setMoment] = useState(null);
+  const [row, setRow] = useState(null);
+  const [err, setErr] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
+
     async function run() {
       setLoading(true);
-      setError("");
-      setMoment(null);
-
-      if (!idParam) {
-        setLoading(false);
-        setError("Missing moment id in URL. Example: /moment?id=14");
-        return;
-      }
-
-      const idNum = Number(idParam);
-      if (!Number.isFinite(idNum)) {
-        setLoading(false);
-        setError(`Invalid id. Must be a number. Got: ${idParam}`);
-        return;
-      }
+      setErr("");
 
       try {
-        const res = await fetch(`/api/moments?id=${idNum}`, { cache: "no-store" });
+        const res = await fetch(`/api/moments?id=${encodeURIComponent(id)}`, {
+          cache: "no-store",
+        });
+
         const data = await res.json();
 
         if (!res.ok) {
-          setError(data?.error || "Failed to load moment");
-        } else {
-          setMoment(data);
+          throw new Error(data?.error || `Request failed (${res.status})`);
+        }
+
+        if (!cancelled) {
+          setRow(data);
         }
       } catch (e) {
-        setError(e?.message || "Network error");
+        if (!cancelled) setErr(e?.message || "Failed to load moment");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
     run();
-  }, [idParam]);
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  const bodyText = useMemo(() => (row ? pickBestText(row) : ""), [row]);
+
+  if (loading) {
+    return (
+      <div style={{ padding: 40, color: "white" }}>
+        Loading moment <b>{id}</b>…
+      </div>
+    );
+  }
+
+  if (err) {
+    return (
+      <div style={{ padding: 40, color: "white" }}>
+        <div style={{ marginBottom: 12 }}>
+          <Link href="/" style={{ color: "white", opacity: 0.8 }}>
+            ← Back
+          </Link>
+        </div>
+        <div style={{ background: "rgba(255,0,0,0.15)", padding: 12, borderRadius: 10 }}>
+          Error: {err}
+        </div>
+      </div>
+    );
+  }
+
+  const title = row?.title || "(no title)";
+  const source = row?.source || "(unknown source)";
+  const url = row?.url || "";
+  const published = row?.published_at
+    ? new Date(row.published_at).toLocaleString()
+    : "";
 
   return (
-    <main style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
-      <Link href="/" style={{ display: "inline-block", marginBottom: 14 }}>
-        ← Back
-      </Link>
+    <div style={{ padding: 40, color: "white", maxWidth: 900 }}>
+      <div style={{ marginBottom: 16 }}>
+        <Link href="/" style={{ color: "white", opacity: 0.85 }}>
+          ← Back
+        </Link>
+      </div>
 
-      {loading && <div style={{ opacity: 0.8 }}>Loading...</div>}
+      <h1 style={{ fontSize: 40, lineHeight: 1.1, margin: "0 0 10px 0" }}>{title}</h1>
 
-      {!loading && error && (
-        <div
-          style={{
-            padding: 14,
-            borderRadius: 10,
-            border: "1px solid rgba(255,255,255,0.14)",
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      {!loading && !error && moment && (
-        <>
-          <h1 style={{ fontSize: 34, marginBottom: 10 }}>
-            {moment.title || "(no title)"}
-          </h1>
-
-          <div style={{ opacity: 0.8, marginBottom: 8 }}>
-            <b>Source:</b> {moment.source || "Unknown"}
+      <div style={{ opacity: 0.85, marginBottom: 14 }}>
+        <div><b>Source:</b> {source}</div>
+        {published ? <div><b>Published:</b> {published}</div> : null}
+        {url ? (
+          <div>
+            <a href={url} target="_blank" rel="noreferrer" style={{ color: "white" }}>
+              Open original article →
+            </a>
           </div>
+        ) : null}
+      </div>
 
-          {moment.published_at && (
-            <div style={{ opacity: 0.8, marginBottom: 18 }}>
-              <b>Published:</b> {formatDate(moment.published_at)}
-            </div>
-          )}
+      <hr style={{ borderColor: "rgba(255,255,255,0.25)", margin: "18px 0" }} />
 
-          {moment.url && (
-            <div style={{ marginBottom: 18 }}>
-              <a href={moment.url} target="_blank" rel="noreferrer">
-                Open original →
-              </a>
-            </div>
-          )}
-
-          <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.55 }}>
-            {moment.raw || moment.summary || "(No text)"}
-          </div>
-        </>
-      )}
-    </main>
+      {/* Body */}
+      <div
+        style={{
+          whiteSpace: "pre-wrap",
+          lineHeight: 1.7,
+          fontSize: 16,
+          opacity: 0.98,
+        }}
+      >
+        {bodyText?.trim() ? bodyText : "(No text found for this moment.)"}
+      </div>
+    </div>
   );
 }
