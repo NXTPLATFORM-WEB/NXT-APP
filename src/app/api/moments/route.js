@@ -1,41 +1,44 @@
+// src/app/api/moments/route.js
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 
 export async function GET(req) {
-  const { searchParams } = new URL(req.url);
-  const idParam = searchParams.get("id");
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id");
 
-  if (!idParam) {
-    const { data, error } = await supabaseServer
-      .from("stories")
-      .select("id, source, title, summary, published_at")
-      .order("published_at", { ascending: false })
-      .limit(50);
+    const sb = supabaseServer();
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    // If id is provided, it MUST be numeric because your DB id is bigint/int.
+    if (id) {
+      const numericId = Number(id);
+      if (!Number.isFinite(numericId)) {
+        return NextResponse.json(
+          { error: `Invalid id. Expected a number, got: ${id}` },
+          { status: 400 }
+        );
+      }
+
+      const { data, error } = await sb
+        .from("stories")
+        .select("id, source, title, url, published_at, summary, raw")
+        .eq("id", numericId)
+        .single();
+
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      return NextResponse.json(data);
     }
 
-    return NextResponse.json({ data });
+    // List
+    const { data, error } = await sb
+      .from("stories")
+      .select("id, source, title, url, published_at, summary")
+      .order("published_at", { ascending: false })
+      .limit(60);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ feed: data });
+  } catch (e) {
+    return NextResponse.json({ error: e?.message ?? "Unknown error" }, { status: 500 });
   }
-
-  const id = Number(idParam);
-  if (!Number.isFinite(id)) {
-    return NextResponse.json(
-      { error: `Invalid id ${idParam}` },
-      { status: 400 }
-    );
-  }
-
-  const { data, error } = await supabaseServer
-    .from("stories")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json(data);
 }

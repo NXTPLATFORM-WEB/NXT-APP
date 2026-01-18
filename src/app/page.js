@@ -1,32 +1,27 @@
-import { headers } from "next/headers";
+// src/app/page.js
+import FeedClient from "@/components/FeedClient";
+import { supabaseServer } from "@/lib/supabaseServer";
+
+export const dynamic = "force-dynamic"; // ensures fresh data
 
 export default async function HomePage() {
-  const host = headers().get("host");
-  const protocol = host.includes("localhost") ? "http" : "https";
+  const sb = supabaseServer();
 
-  const res = await fetch(`${protocol}://${host}/api/moments`, {
-    cache: "no-store",
-  });
+  const { data, error } = await sb
+    .from("stories")
+    .select("id, source, title, url, published_at, summary")
+    .order("published_at", { ascending: false })
+    .limit(60);
 
-  const data = await res.json();
+  if (error) {
+    return (
+      <main style={{ padding: 24 }}>
+        <h1>NXT</h1>
+        <p style={{ color: "#ffb4b4" }}>Server error loading feed:</p>
+        <pre>{error.message}</pre>
+      </main>
+    );
+  }
 
-  return (
-    <main className="p-8">
-      <h1 className="text-3xl font-bold mb-6">NXT</h1>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {data.map((m) => (
-          <a
-            key={m.id}
-            href={`/moment?id=${m.id}`}
-            className="p-4 rounded-lg bg-white/5 hover:bg-white/10 transition"
-          >
-            <div className="text-sm opacity-70">{m.source}</div>
-            <div className="font-semibold mt-2">{m.title}</div>
-            <div className="text-sm opacity-60 mt-1">{m.summary}</div>
-          </a>
-        ))}
-      </div>
-    </main>
-  );
+  return <FeedClient feed={data ?? []} />;
 }
