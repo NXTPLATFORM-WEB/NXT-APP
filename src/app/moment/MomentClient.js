@@ -1,124 +1,115 @@
+// src/app/moment/MomentClient.js
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
-export default function MomentClient({ id }) {
-  const [moment, setMoment] = useState(null);
+function formatDate(v) {
+  try {
+    if (!v) return "";
+    const d = new Date(v);
+    return d.toLocaleString();
+  } catch {
+    return "";
+  }
+}
+
+export default function MomentClient() {
+  const searchParams = useSearchParams();
+  const idParam = searchParams.get("id");
+
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState("");
-
-  const safeId = useMemo(() => (id ? String(id) : ""), [id]);
+  const [error, setError] = useState("");
+  const [moment, setMoment] = useState(null);
 
   useEffect(() => {
-    let cancelled = false;
-
     async function run() {
       setLoading(true);
-      setErr("");
+      setError("");
       setMoment(null);
 
-      if (!safeId) {
+      if (!idParam) {
         setLoading(false);
-        setErr("Missing moment id in URL. Example: /moment?id=1");
+        setError("Missing moment id in URL. Example: /moment?id=14");
+        return;
+      }
+
+      const idNum = Number(idParam);
+      if (!Number.isFinite(idNum)) {
+        setLoading(false);
+        setError(`Invalid id. Must be a number. Got: ${idParam}`);
         return;
       }
 
       try {
-        const res = await fetch(`/api/moments?id=${encodeURIComponent(safeId)}`, {
-          cache: "no-store",
-        });
+        const res = await fetch(`/api/moments?id=${idNum}`, { cache: "no-store" });
+        const data = await res.json();
 
         if (!res.ok) {
-          const text = await res.text();
-          throw new Error(text || `Request failed: ${res.status}`);
+          setError(data?.error || "Failed to load moment");
+        } else {
+          setMoment(data);
         }
-
-        const data = await res.json();
-        if (!cancelled) setMoment(data);
       } catch (e) {
-        if (!cancelled) setErr(e?.message || "Failed to load moment");
+        setError(e?.message || "Network error");
       } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
     }
 
     run();
-    return () => {
-      cancelled = true;
-    };
-  }, [safeId]);
-
-  const body =
-    moment?.summary ||
-    moment?.text ||
-    moment?.description ||
-    "";
+  }, [idParam]);
 
   return (
-    <div style={{ padding: 24, maxWidth: 980, margin: "0 auto" }}>
-      <div style={{ marginBottom: 16 }}>
-        <Link href="/" style={{ color: "#fff", opacity: 0.85, textDecoration: "none" }}>
-          ← Back
-        </Link>
-      </div>
+    <main style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
+      <Link href="/" style={{ display: "inline-block", marginBottom: 14 }}>
+        ← Back
+      </Link>
 
-      {loading && <div>Loading…</div>}
+      {loading && <div style={{ opacity: 0.8 }}>Loading...</div>}
 
-      {!loading && err && (
-        <div style={{ padding: 12, border: "1px solid rgba(255,255,255,0.2)", borderRadius: 12 }}>
-          <strong>Error:</strong> {err}
+      {!loading && error && (
+        <div
+          style={{
+            padding: 14,
+            borderRadius: 10,
+            border: "1px solid rgba(255,255,255,0.14)",
+          }}
+        >
+          {error}
         </div>
       )}
 
-      {!loading && !err && moment && (
+      {!loading && !error && moment && (
         <>
-          <h1 style={{ margin: "0 0 8px 0", fontSize: 34, lineHeight: 1.1 }}>
-            {moment.title || "Untitled"}
+          <h1 style={{ fontSize: 34, marginBottom: 10 }}>
+            {moment.title || "(no title)"}
           </h1>
 
-          <div style={{ opacity: 0.85, marginBottom: 18 }}>
-            <div>
-              <strong>Topic:</strong> {moment.topic || "—"}
-            </div>
-            <div>
-              <strong>Source:</strong>{" "}
-              {moment.url ? (
-                <a
-                  href={moment.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  style={{ color: "#cfd6ff" }}
-                >
-                  {moment.source || "Open link"}
-                </a>
-              ) : (
-                "—"
-              )}
-            </div>
-            {moment.published_at && (
-              <div>
-                <strong>Published:</strong> {new Date(moment.published_at).toLocaleString()}
-              </div>
-            )}
+          <div style={{ opacity: 0.8, marginBottom: 8 }}>
+            <b>Source:</b> {moment.source || "Unknown"}
           </div>
 
-          <div
-            style={{
-              padding: 16,
-              borderRadius: 16,
-              border: "1px solid rgba(255,255,255,0.18)",
-              background: "rgba(255,255,255,0.06)",
-              minHeight: 140,
-              whiteSpace: "pre-wrap",
-              lineHeight: 1.6,
-              fontSize: 16,
-            }}
-          >
-            {body ? body : <em>(No text)</em>}
+          {moment.published_at && (
+            <div style={{ opacity: 0.8, marginBottom: 18 }}>
+              <b>Published:</b> {formatDate(moment.published_at)}
+            </div>
+          )}
+
+          {moment.url && (
+            <div style={{ marginBottom: 18 }}>
+              <a href={moment.url} target="_blank" rel="noreferrer">
+                Open original →
+              </a>
+            </div>
+          )}
+
+          <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.55 }}>
+            {moment.raw || moment.summary || "(No text)"}
           </div>
         </>
       )}
-    </div>
+    </main>
   );
 }
