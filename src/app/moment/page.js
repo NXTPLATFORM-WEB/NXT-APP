@@ -1,12 +1,12 @@
 import { Suspense } from "react";
 import MomentClient from "./MomentClient";
 
-export default function MomentPage() {
+export default function MomentPage({ searchParams }) {
+  const id = searchParams?.id ? String(searchParams.id) : "";
+
   return (
-    <main style={{ padding: 24 }}>
-      <Suspense fallback={<div style={{ opacity: 0.8 }}>Loading moment…</div>}>
-        <MomentClient />
-      </Suspense>
-    </main>
+    <Suspense fallback={<div style={{ padding: 24 }}>Loading moment…</div>}>
+      <MomentClient id={id} />
+    </Suspense>
   );
 }
